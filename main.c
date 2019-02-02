@@ -86,13 +86,8 @@
 #define DEVICE_MODEL_NUMBERSTR "Version 3.1"
 #define DEVICE_FIRMWARE_STRING "Version 13.1.0"
 static bool m_connected = false;
-#if defined(ADS1292)
-#include "ads1291-2.h"
-#include "ble_eeg.h"
-ble_eeg_t m_eeg;
-#define SPI_SCLK_WRITE_REG 0
-#define SPI_SCLK_SAMPLING 2
-#endif
+#include "ble_sg.h"
+ble_sg_t m_sg;
 
 #if defined(SAADC_ENABLED) && SAADC_ENABLED == 1
 #include "nrf_drv_saadc.h"
@@ -101,11 +96,10 @@ ble_eeg_t m_eeg;
 static nrf_saadc_value_t m_buffer_pool[SAMPLES_IN_BUFFER];
 static uint32_t m_adc_evt_counter;
 #endif
-
-#if defined(BLE_BAS_ENABLED) && BLE_BAS_ENABLED == 1
-#include "ble_bas.h"
 #define BATTERY_LEVEL_MEAS_INTERVAL APP_TIMER_TICKS(500) /**< Battery level measurement interval (ticks). */
 APP_TIMER_DEF(m_battery_timer_id);                        /**< Battery timer. */
+#if defined(BLE_BAS_ENABLED) && BLE_BAS_ENABLED == 1
+#include "ble_bas.h"
 static ble_bas_t m_bas;                                   /**< Structure used to identify the battery service. */
 #endif
 
@@ -117,7 +111,7 @@ static uint16_t m_samples;
 
 #define APP_FEATURE_NOT_SUPPORTED BLE_GATT_STATUS_ATTERR_APP_BEGIN + 2 /**< Reply when unsupported features are requested. */
 
-#define DEVICE_NAME "nRF52-GSR"           //"nRF52_EEG"         /**< Name of device. Will be included in the advertising data. */
+#define DEVICE_NAME "nRF52-StrGg"           //"nRF52_SG"         /**< Name of device. Will be included in the advertising data. */
 
 #define MANUFACTURER_NAME "Potato Labs" /**< Manufacturer. Will be passed to Device Information Service. */
 #define APP_ADV_INTERVAL 300            /**< The advertising interval (in units of 0.625 ms. This value corresponds to 187.5 ms). */
@@ -152,9 +146,7 @@ static nrf_ble_gatt_t m_gatt;                            /**< GATT module instan
 
 static ble_uuid_t m_adv_uuids[] =
     {
-#if defined(BLE_BAS_ENABLED) && BLE_BAS_ENABLED == 1
-        {BLE_UUID_BATTERY_SERVICE, BLE_UUID_TYPE_BLE},
-#endif
+        {BLE_UUID_SG_MEASUREMENT_SERVICE, BLE_UUID_TYPE_BLE},
         {BLE_UUID_DEVICE_INFORMATION_SERVICE, BLE_UUID_TYPE_BLE}}; /**< Universally unique service identifiers. */
 
 static void advertising_start(void);
@@ -186,7 +178,7 @@ static void m_sampling_timeout_handler(void *p_context) {
 }
 #endif
 
-#if defined(BLE_BAS_ENABLED) && BLE_BAS_ENABLED == 1
+//#if defined(BLE_BAS_ENABLED) && BLE_BAS_ENABLED == 1
 
 static void battery_level_update(void) {
 //  ret_code_t err_code;
@@ -203,7 +195,7 @@ static void battery_level_meas_timeout_handler(void *p_context) {
   UNUSED_PARAMETER(p_context);
   battery_level_update();
 }
-#endif
+//#endif
 
 /**@brief Function for the Timer initialization.
  *
@@ -220,12 +212,12 @@ static void timers_init(void) {
   APP_ERROR_CHECK(err_code);
 #endif
 
-#if defined(BLE_BAS_ENABLED) && BLE_BAS_ENABLED == 1
+//#if defined(BLE_BAS_ENABLED) && BLE_BAS_ENABLED == 1
   err_code = app_timer_create(&m_battery_timer_id,
       APP_TIMER_MODE_REPEATED,
       battery_level_meas_timeout_handler);
   APP_ERROR_CHECK(err_code);
-#endif
+//#endif
 }
 
 /**@brief Function for the GAP initialization.
@@ -270,6 +262,7 @@ static void gatt_init(void) {
 static void services_init(void) {
   uint32_t err_code;
 /**@Device Information Service:*/
+  ble_sg_service_init(&m_sg);
 
 #if defined(BLE_BAS_ENABLED) && BLE_BAS_ENABLED == 1
   ble_bas_init_t bas_init;
@@ -364,10 +357,10 @@ static void application_timers_start(void) {
   APP_ERROR_CHECK(err_code);
 #endif
 
-#if defined(BLE_BAS_ENABLED) && BLE_BAS_ENABLED == 1
+//#if defined(BLE_BAS_ENABLED) && BLE_BAS_ENABLED == 1
   err_code = app_timer_start(m_battery_timer_id, BATTERY_LEVEL_MEAS_INTERVAL, NULL);
   APP_ERROR_CHECK(err_code);
-#endif
+//#endif
 }
 
 /**@brief Function for putting the chip into sleep mode.
@@ -507,6 +500,7 @@ static void ble_evt_dispatch(ble_evt_t *p_ble_evt) {
 #if defined(BLE_BAS_ENABLED) && BLE_BAS_ENABLED == 1
   ble_bas_on_ble_evt(&m_bas, p_ble_evt);
 #endif
+  ble_sg_on_ble_evt(&m_sg, p_ble_evt);
 }
 
 /**@brief Function for dispatching a system event to interested modules.
@@ -674,22 +668,20 @@ void saadc_callback(nrf_drv_saadc_evt_t const *p_event) {
     APP_ERROR_CHECK(err_code);
 
     int i;
-//    NRF_LOG_INFO("ADC event number: %d\r\n", (int)m_adc_evt_counter);
+
     int sum = 0;
     for (i = 0; i < SAMPLES_IN_BUFFER; i++) {
-//      NRF_LOG_INFO("%d\r\n", p_event->data.done.p_buffer[i]);
       sum += p_event->data.done.p_buffer[i];
     }
     NRF_LOG_INFO("%d\r\n", sum/4);
-    m_bas.battery_level = p_event->data.done.p_buffer[3];
-    err_code = ble_bas_battery_level_update(&m_bas);
-    if ((err_code != NRF_SUCCESS) &&
-        (err_code != NRF_ERROR_INVALID_STATE) &&
-        (err_code != NRF_ERROR_RESOURCES) &&
-        (err_code != BLE_ERROR_GATTS_SYS_ATTR_MISSING)) {
-      APP_ERROR_HANDLER(err_code);
+    // TODO: Transmit via BLuetooth.
+    memcpy(&m_sg.sg_ch1_buffer[m_sg.sg_ch1_count], &sum, 4);
+    m_sg.sg_ch1_count += 4;
+    if (m_sg.sg_ch1_count >= SG_PACKET_LENGTH) {
+      m_sg.sg_ch1_count = 0;
+      ble_sg_update_1ch(&m_sg); 
     }
-    m_adc_evt_counter++;
+    // TODO: Transmit Packet:
     nrf_gpio_pin_set(BATTERY_LOAD_SWITCH_CTRL_PIN); //LOAD SWITCH OFF
   }
 }
@@ -742,6 +734,7 @@ int main(void) {
   advertising_init();
   services_init();
   conn_params_init();
+  m_sg.sg_ch1_count = 0;
 
 #if defined(SAADC_ENABLED) && SAADC_ENABLED == 1
   saadc_init();
