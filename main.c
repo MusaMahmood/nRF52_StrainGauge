@@ -94,15 +94,6 @@ ble_eeg_t m_eeg;
 #define SPI_SCLK_SAMPLING 2
 #endif
 
-#if defined(MPU9250) || defined(MPU9255) //mpu_send_timeout_handler
-#include "ble_mpu.h"
-ble_mpu_t m_mpu;
-#include "app_mpu.h"
-#include "nrf_drv_twi.h"
-APP_TIMER_DEF(m_mpu_send_timer_id);
-#define TICKS_MPU_SAMPLING_INTERVAL APP_TIMER_TICKS(32)
-#endif
-
 #if defined(SAADC_ENABLED) && SAADC_ENABLED == 1
 #include "nrf_drv_saadc.h"
 #define SAMPLES_IN_BUFFER 4
@@ -161,9 +152,6 @@ static nrf_ble_gatt_t m_gatt;                            /**< GATT module instan
 
 static ble_uuid_t m_adv_uuids[] =
     {
-#if (defined(MPU60x0) || defined(MPU9150) || defined(MPU9250) || defined(MPU9255))
-        {BLE_UUID_MPU_SERVICE_UUID, BLE_UUID_TYPE_BLE},
-#endif
 #if defined(BLE_BAS_ENABLED) && BLE_BAS_ENABLED == 1
         {BLE_UUID_BATTERY_SERVICE, BLE_UUID_TYPE_BLE},
 #endif
@@ -197,17 +185,6 @@ static void m_sampling_timeout_handler(void *p_context) {
 #endif
 }
 #endif
-#if (defined(MPU60x0) || defined(MPU9150) || defined(MPU9250) || defined(MPU9255))
-static void mpu_send_timeout_handler(void *p_context) {
-  //DEPENDS ON SAMPLING RATE
-  mpu_read_accel_array(&m_mpu);
-  mpu_read_gyro_array(&m_mpu);
-  if (m_mpu.mpu_count == 240) {
-    m_mpu.mpu_count = 0;
-    ble_mpu_combined_update_v2(&m_mpu);
-  }
-}
-#endif /**@(defined(MPU60x0) || defined(MPU9150) || defined(MPU9255))*/
 
 #if defined(BLE_BAS_ENABLED) && BLE_BAS_ENABLED == 1
 
@@ -237,10 +214,6 @@ static void timers_init(void) {
   //Create timers
   ret_code_t err_code = app_timer_init();
   APP_ERROR_CHECK(err_code);
-#if (defined(MPU60x0) || defined(MPU9150) || defined(MPU9250) || defined(MPU9255))
-  err_code = app_timer_create(&m_mpu_send_timer_id, APP_TIMER_MODE_REPEATED, mpu_send_timeout_handler);
-  APP_ERROR_CHECK(err_code);
-#endif
 
 #if defined(APP_TIMER_SAMPLING) && APP_TIMER_SAMPLING == 1
   err_code = app_timer_create(&m_sampling_timer_id, APP_TIMER_MODE_REPEATED, m_sampling_timeout_handler);
@@ -297,9 +270,6 @@ static void gatt_init(void) {
 static void services_init(void) {
   uint32_t err_code;
 /**@Device Information Service:*/
-#if (defined(MPU60x0) || defined(MPU9150) || defined(MPU9250) || defined(MPU9255))
-  ble_mpu_service_init(&m_mpu);
-#endif
 
 #if defined(BLE_BAS_ENABLED) && BLE_BAS_ENABLED == 1
   ble_bas_init_t bas_init;
@@ -391,11 +361,6 @@ static void application_timers_start(void) {
   ret_code_t err_code;
 #if defined(APP_TIMER_SAMPLING) && APP_TIMER_SAMPLING == 1
   err_code = app_timer_start(m_sampling_timer_id, TICKS_SAMPLING_INTERVAL, NULL);
-  APP_ERROR_CHECK(err_code);
-#endif
-
-#if (defined(MPU60x0) || defined(MPU9150) || defined(MPU9250) || defined(MPU9255))
-  err_code = app_timer_start(m_mpu_send_timer_id, TICKS_MPU_SAMPLING_INTERVAL, NULL);
   APP_ERROR_CHECK(err_code);
 #endif
 
@@ -541,9 +506,6 @@ static void ble_evt_dispatch(ble_evt_t *p_ble_evt) {
   nrf_ble_gatt_on_ble_evt(&m_gatt, p_ble_evt);
 #if defined(BLE_BAS_ENABLED) && BLE_BAS_ENABLED == 1
   ble_bas_on_ble_evt(&m_bas, p_ble_evt);
-#endif
-#if (defined(MPU60x0) || defined(MPU9150) || defined(MPU9250) || defined(MPU9255))
-  ble_mpu_on_ble_evt(&m_mpu, p_ble_evt);
 #endif
 }
 
@@ -702,25 +664,6 @@ static void advertising_start(void) {
   APP_ERROR_CHECK(err_code);
 }
 
-#if (defined(MPU60x0) || defined(MPU9150) || defined(MPU9250) || defined(MPU9255))
-///*
-//MPU9250;MPU9255
-void mpu_setup(void) {
-  ret_code_t ret_code;
-  // Initiate MPU driver
-  ret_code = mpu_init();
-  APP_ERROR_CHECK(ret_code); // Check for errors in return value
-
-  // Setup and configure the MPU with intial values
-  mpu_config_t p_mpu_config = MPU_DEFAULT_CONFIG(); // Load default values
-  p_mpu_config.smplrt_div = 19;                     // Change sampelrate. Sample Rate = Gyroscope Output Rate / (1 + SMPLRT_DIV). 19 gives a sample rate of 50Hz
-  p_mpu_config.accel_config.afs_sel = AFS_16G;      // Set accelerometer full scale range to 2G
-  ret_code = mpu_config(&p_mpu_config);             // Configure the MPU with above values
-  APP_ERROR_CHECK(ret_code);                        // Check for errors in return value
-}
-//*/
-#endif
-
 #if defined(SAADC_ENABLED) && SAADC_ENABLED == 1
 
 void saadc_callback(nrf_drv_saadc_evt_t const *p_event) {
@@ -799,10 +742,6 @@ int main(void) {
   advertising_init();
   services_init();
   conn_params_init();
-
-#if (defined(MPU60x0) || defined(MPU9150) || defined(MPU9250) || defined(MPU9255))
-  mpu_setup();
-#endif
 
 #if defined(SAADC_ENABLED) && SAADC_ENABLED == 1
   saadc_init();
