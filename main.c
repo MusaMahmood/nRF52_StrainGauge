@@ -96,7 +96,7 @@ ble_sg_t m_sg;
 static nrf_saadc_value_t m_buffer_pool[SAMPLES_IN_BUFFER];
 static uint32_t m_adc_evt_counter;
 #endif
-#define BATTERY_LEVEL_MEAS_INTERVAL APP_TIMER_TICKS(500) /**< Battery level measurement interval (ticks). */
+#define BATTERY_LEVEL_MEAS_INTERVAL APP_TIMER_TICKS(50) /**< Battery level measurement interval (ticks). */
 APP_TIMER_DEF(m_battery_timer_id);                        /**< Battery timer. */
 #if defined(BLE_BAS_ENABLED) && BLE_BAS_ENABLED == 1
 #include "ble_bas.h"
@@ -674,14 +674,15 @@ void saadc_callback(nrf_drv_saadc_evt_t const *p_event) {
       sum += p_event->data.done.p_buffer[i];
     }
     NRF_LOG_INFO("%d\r\n", sum/4);
-    // TODO: Transmit via BLuetooth.
-    memcpy(&m_sg.sg_ch1_buffer[m_sg.sg_ch1_count], &sum, 4);
-    m_sg.sg_ch1_count += 4;
-    if (m_sg.sg_ch1_count >= SG_PACKET_LENGTH) {
+    //Transmit via BLuetooth.
+    uint16_t sum_short = (uint16_t) sum; 
+    memcpy(&m_sg.sg_ch1_buffer[m_sg.sg_ch1_count], &sum_short, 2);
+    m_sg.sg_ch1_count += 2;
+    if (m_sg.sg_ch1_count == SG_PACKET_LENGTH) {
       m_sg.sg_ch1_count = 0;
       ble_sg_update_1ch(&m_sg); 
     }
-    // TODO: Transmit Packet:
+    //Transmit Packet:
     nrf_gpio_pin_set(BATTERY_LOAD_SWITCH_CTRL_PIN); //LOAD SWITCH OFF
   }
 }
@@ -690,9 +691,9 @@ void saadc_init(void) {
 
   ret_code_t err_code;
   nrf_drv_saadc_config_t saadc_config;
-  //Configure SAADC
-  saadc_config.low_power_mode = true;                     //Enable low power mode.
-  saadc_config.resolution = NRF_SAADC_RESOLUTION_12BIT;   //Set SAADC resolution to 12-bit. This will make the SAADC output values from 0 (when input voltage is 0V) to 2^12=2048 (when input voltage is 3.6V for channel gain setting of 1/6).
+  //TODO: Adjust Configuration: SAADC
+  saadc_config.low_power_mode = false;                     //Enable low power mode.
+  saadc_config.resolution = NRF_SAADC_RESOLUTION_14BIT;   //Set SAADC resolution to 12-bit. This will make the SAADC output values from 0 (when input voltage is 0V) to 2^12=2048 (when input voltage is 3.6V for channel gain setting of 1/6).
   saadc_config.oversample = NRF_SAADC_OVERSAMPLE_4X;      //Set oversample to 4x. This will make the SAADC output a single averaged value when the SAMPLE task is triggered 4 times.
   saadc_config.interrupt_priority = APP_IRQ_PRIORITY_LOW; //Set SAADC interrupt to low priority.
 

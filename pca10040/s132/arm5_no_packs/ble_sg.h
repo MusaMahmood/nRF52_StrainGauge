@@ -80,7 +80,4 @@ void ble_sg_on_ble_evt(ble_sg_t *p_sg, ble_evt_t *p_ble_evt);
 
 void ble_sg_update_1ch(ble_sg_t *p_sg);
 
-
-
-
 #endif // BLE_SG_H__
