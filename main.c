@@ -663,21 +663,17 @@ static void advertising_start(void) {
 void saadc_callback(nrf_drv_saadc_evt_t const *p_event) {
   if (p_event->type == NRF_DRV_SAADC_EVT_DONE) {
     ret_code_t err_code;
-    uint8_t battery_level = 0;
     err_code = nrf_drv_saadc_buffer_convert(p_event->data.done.p_buffer, SAMPLES_IN_BUFFER);
     APP_ERROR_CHECK(err_code);
 
     int i;
 
-    int sum = 0;
     for (i = 0; i < SAMPLES_IN_BUFFER; i++) {
-      sum += p_event->data.done.p_buffer[i];
+        NRF_LOG_INFO("%d\r\n", p_event->data.done.p_buffer[i]);
     }
-    NRF_LOG_INFO("%d\r\n", sum/4);
+    memcpy(&m_sg.sg_ch1_buffer[m_sg.sg_ch1_count], (uint8_t*) &p_event->data.done.p_buffer[0], SAMPLES_IN_BUFFER * 2);
+    m_sg.sg_ch1_count += SAMPLES_IN_BUFFER * 2;
     //Transmit via BLuetooth.
-    uint16_t sum_short = (uint16_t) sum; 
-    memcpy(&m_sg.sg_ch1_buffer[m_sg.sg_ch1_count], &sum_short, 2);
-    m_sg.sg_ch1_count += 2;
     if (m_sg.sg_ch1_count == SG_PACKET_LENGTH) {
       m_sg.sg_ch1_count = 0;
       ble_sg_update_1ch(&m_sg); 
@@ -692,7 +688,7 @@ void saadc_init(void) {
   ret_code_t err_code;
   nrf_drv_saadc_config_t saadc_config;
   //TODO: Adjust Configuration: SAADC
-  saadc_config.low_power_mode = false;                     //Enable low power mode.
+  saadc_config.low_power_mode = false;                    //Enable low power mode.
   saadc_config.resolution = NRF_SAADC_RESOLUTION_14BIT;   //Set SAADC resolution to 12-bit. This will make the SAADC output values from 0 (when input voltage is 0V) to 2^12=2048 (when input voltage is 3.6V for channel gain setting of 1/6).
   saadc_config.oversample = NRF_SAADC_OVERSAMPLE_4X;      //Set oversample to 4x. This will make the SAADC output a single averaged value when the SAMPLE task is triggered 4 times.
   saadc_config.interrupt_priority = APP_IRQ_PRIORITY_LOW; //Set SAADC interrupt to low priority.
