@@ -49,7 +49,7 @@
 // Characteristic UUIDs
 #define BLE_UUID_SG_CH1_CHAR 0xA731
 
-#define SG_PACKET_LENGTH 16
+#define SG_PACKET_LENGTH 40
 
 /**@brief Biopotential Measurement Service init structure. This contains all options and data needed for
  *        initialization of the service. */
